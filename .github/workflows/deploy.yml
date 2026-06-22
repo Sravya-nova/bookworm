@@ -5,6 +5,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -15,8 +18,10 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.0'
           channel: 'stable'
+          # Removing specific version to always use the latest stable,
+          # which includes the latest API fixes (like withValues/withOpacity)
+          # flutter-version: '3.27.0'
 
       - name: Install dependencies
         run: flutter pub get
