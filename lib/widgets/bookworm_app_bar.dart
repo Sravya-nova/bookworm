@@ -40,7 +40,11 @@ class BookwormAppBar extends StatelessWidget implements PreferredSizeWidget {
       ),
       actions: [
         IconButton(
-          onPressed: () {},
+          onPressed: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Search functionality is active in the Explore tab')),
+            );
+          },
           icon: const Icon(Icons.search, color: BookwormColors.onSurfaceVariant),
         ),
         if (showAvatar && avatarUrl != null) ...[

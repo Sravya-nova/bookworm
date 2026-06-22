@@ -59,6 +59,18 @@ class Book {
           ? authors.map((a) => a.name).join(', ')
           : 'Unknown Author';
 
+  /// Returns the best available format for reading.
+  String? get readableUrl {
+    // Priority: HTML > PDF > EPUB > Plain Text
+    // Note: Gutendex often provides HTML which is best for in-app or browser reading.
+    return formats['text/html'] ??
+           formats['text/html; charset=utf-8'] ??
+           formats['application/pdf'] ??
+           formats['application/epub+zip'] ??
+           formats['text/plain; charset=utf-8'] ??
+           formats['text/plain'];
+  }
+
   factory Book.fromJson(Map<String, dynamic> json) {
     return Book(
       id: json['id'] as int,
@@ -95,4 +107,23 @@ class Author {
       deathYear: json['death_year'] as int?,
     );
   }
+}
+
+/// A bridge class to make Gutendex books compatible with widgets expecting the legacy Book model
+class LegacyBookBridge {
+  final int id;
+  final String title;
+  final String author;
+  final String coverUrl;
+  final List<String> subjects;
+  final String? readableUrl;
+
+  LegacyBookBridge({
+    required this.id,
+    required this.title,
+    required this.author,
+    required this.coverUrl,
+    required this.subjects,
+    this.readableUrl,
+  });
 }

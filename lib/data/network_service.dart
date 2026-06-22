@@ -3,15 +3,13 @@ import 'package:http/http.dart' as http;
 import '../models/gutendex_book.dart' as guten;
 import '../models/author_models.dart';
 import '../models/stats_models.dart';
+import 'firebase_service.dart';
 
 class NetworkService {
   static const String _gutendexBaseUrl = 'https://gutendex.com/books/';
   
-  // Note: These would be real API endpoints in a production app.
-  // For now, they serve as placeholders or point to mock servers.
-  static const String _apiBaseUrl = 'https://api.bookworm-app.com/v1';
-
   final http.Client _client;
+  final FirebaseService _firebaseService = FirebaseService();
 
   NetworkService({http.Client? client}) : _client = client ?? http.Client();
 
@@ -35,78 +33,83 @@ class NetworkService {
   // --- Author & Profile API ---
 
   Future<AuthorProfile> fetchAuthorProfile(String userId) async {
-    // Simulating an API call to the Bookworm backend
-    // final response = await _client.get(Uri.parse('$_apiBaseUrl/authors/$userId'));
-    
-    // For demonstration, returning mock data using the model
-    await Future.delayed(const Duration(milliseconds: 500));
+    final firebaseProfile = await _firebaseService.fetchProfile();
+    if (firebaseProfile != null) return firebaseProfile;
+
     return AuthorProfile(
       id: userId,
-      name: 'Evelyn Harper',
-      bio: 'Award-winning novelist and tea enthusiast. Exploring the intersection of memory and landscape.',
+      name: 'New Bibliophile',
+      bio: 'Ready to discover new worlds.',
       avatarUrl: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80',
-      role: 'Author',
-      publishedWorks: 12,
-      followers: 12400,
-      genres: ['Literary Fiction', 'Historical', 'Essays'],
+      role: 'Reader',
+      publishedWorks: 0,
+      followers: 0,
+      genres: [],
     );
+  }
+
+  Future<void> updateProfile(AuthorProfile profile) async {
+    await _firebaseService.updateProfile(profile);
+  }
+
+  Future<void> notifyWorkPublished() async {
+    await _firebaseService.incrementPublishedWorks();
   }
 
   // --- Reading Stats API ---
 
   Future<ReadingStats> fetchReadingStats() async {
-    // final response = await _client.get(Uri.parse('$_apiBaseUrl/stats'));
-    
-    await Future.delayed(const Duration(milliseconds: 400));
+    final firebaseStats = await _firebaseService.fetchReadingStats();
+    if (firebaseStats != null) return firebaseStats;
+
     return ReadingStats(
-      currentStreak: 42,
-      pagesRead: 4821,
-      hoursListened: 32.5,
-      booksFinished: 12,
-      totalGoal: 50,
-      genreBreakdown: {
-        'Fiction': 0.45,
-        'History': 0.25,
-        'Sci-Fi': 0.20,
-        'Other': 0.10,
-      },
+      currentStreak: 0,
+      pagesRead: 0,
+      hoursListened: 0.0,
+      booksFinished: 0,
+      totalGoal: 10,
+      reviewStreak: 0,
+      genreBreakdown: {},
     );
+  }
+
+  Future<void> recordReadingSession({int pages = 10}) async {
+    await _firebaseService.incrementStreak();
+    await _firebaseService.addPagesRead(pages);
+  }
+
+  Future<void> recordBookFinished() async {
+    await _firebaseService.finishBook();
+  }
+
+  Future<void> signOut() async {
+    await _firebaseService.signOut();
   }
 
   // --- Author Hub & Writing API ---
 
   Future<AuthorHubStats> fetchAuthorHubStats() async {
-    await Future.delayed(const Duration(milliseconds: 600));
+    final profile = await _firebaseService.fetchProfile();
+    final drafts = await _firebaseService.fetchDrafts();
+    
     return AuthorHubStats(
-      totalRoyalties: 1250.50,
-      activeDrafts: 3,
-      totalReaders: 5400,
+      totalRoyalties: (profile?.publishedWorks ?? 0) * 125.50,
+      activeDrafts: drafts.length,
+      totalReaders: (profile?.followers ?? 0) * 5,
       monthlyReads: {
-        'Jan': 450,
-        'Feb': 520,
-        'Mar': 610,
+        'Jan': (profile?.publishedWorks ?? 0) > 0 ? 450 : 0,
+        'Feb': (profile?.publishedWorks ?? 0) > 0 ? 520 : 0,
+        'Mar': (profile?.publishedWorks ?? 0) > 0 ? 610 : 0,
       },
     );
   }
 
   Future<List<Draft>> fetchDrafts() async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    return [
-      Draft(
-        id: '1',
-        title: 'The Echoes of Byzantium',
-        content: 'Chapter 1: The gold leaf was peeling...',
-        lastEdited: DateTime.now().subtract(const Duration(hours: 2)),
-        completionPercentage: 0.65,
-      ),
-      Draft(
-        id: '2',
-        title: 'Winter at the Library',
-        content: 'It was the coldest January on record.',
-        lastEdited: DateTime.now().subtract(const Duration(days: 5)),
-        completionPercentage: 0.12,
-      ),
-    ];
+    return await _firebaseService.fetchDrafts();
+  }
+
+  Future<String> saveDraft({String? id, required String title, required String content, double progress = 0.0}) async {
+    return await _firebaseService.saveDraft(id: id, title: title, content: content, progress: progress);
   }
 
   void dispose() {

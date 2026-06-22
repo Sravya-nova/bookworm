@@ -7,9 +7,15 @@ class ApiService {
 
   /// Fetches a list of books from the Gutendex API.
   /// 
+  /// [query] - Optional search term to filter results.
   /// Returns a [Future<List<Book>>] or throws an [Exception] on failure.
-  Future<List<Book>> fetchBooks() async {
-    final uri = Uri.parse(_baseUrl);
+  Future<List<Book>> fetchBooks({String? query}) async {
+    final queryParameters = <String, String>{};
+    if (query != null && query.isNotEmpty) {
+      queryParameters['search'] = query;
+    }
+
+    final uri = Uri.parse(_baseUrl).replace(queryParameters: queryParameters);
 
     try {
       final response = await http.get(uri);
@@ -17,19 +23,17 @@ class ApiService {
       if (response.statusCode == 200) {
         // Parse JSON into the BookResponse model
         final Map<String, dynamic> data = json.decode(response.body);
+        
+        // Clean data if necessary
         final bookResponse = BookResponse.fromJson(data);
         
-        // Return only the list of books as requested
         return bookResponse.results;
       } else {
-        // Handle non-200 status codes
         throw Exception('Failed to fetch books. Status code: ${response.statusCode}');
       }
     } on http.ClientException catch (e) {
-      // Handle network/connection errors
       throw Exception('Network error: ${e.message}');
     } catch (e) {
-      // Handle any other errors (parsing, etc.)
       throw Exception('An unexpected error occurred: $e');
     }
   }

@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../data/network_service.dart';
 import '../models/author_models.dart';
+import '../models/stats_models.dart';
 import '../theme/bookworm_colors.dart';
 import '../widgets/network_cover_image.dart';
 import 'stats_screen.dart';
@@ -17,27 +18,26 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final NetworkService _networkService = NetworkService();
   late Future<AuthorProfile> _profileFuture;
+  late Future<ReadingStats> _statsFuture;
 
   @override
   void initState() {
     super.initState();
-    _profileFuture = _networkService.fetchAuthorProfile('user_123');
+    _profileFuture = _networkService.fetchAuthorProfile('current');
+    _statsFuture = _networkService.fetchReadingStats();
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<AuthorProfile>(
-      future: _profileFuture,
+    return FutureBuilder<List<dynamic>>(
+      future: Future.wait([_profileFuture, _statsFuture]),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
-        }
-
-        final profile = snapshot.data!;
+        final profile = snapshot.data?[0] as AuthorProfile;
+        final stats = snapshot.data?[1] as ReadingStats;
 
         return ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
@@ -117,23 +117,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 24),
-            FilledButton(
-              onPressed: () {},
-              style: FilledButton.styleFrom(
-                backgroundColor: BookwormColors.primary,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              ),
-              child: const Text('Edit Profile'),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () {},
+                    style: FilledButton.styleFrom(
+                      backgroundColor: BookwormColors.primary,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text('Edit Profile'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                IconButton(
+                  onPressed: () => _networkService.signOut(),
+                  icon: const Icon(Icons.logout, color: BookwormColors.error),
+                  style: IconButton.styleFrom(
+                    backgroundColor: BookwormColors.surfaceContainerHigh,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 32),
-            // Reusing Stats widgets but we should ideally fetch stats here too or pass them
-            const StreakCard(streak: 42), 
+            StreakCard(streak: stats.currentStreak), 
             const SizedBox(height: 16),
-            const GoalCard(
-              finished: 12,
-              total: 50,
-              pagesRead: 4821,
-              hoursListened: 32.5,
+            GoalCard(
+              finished: stats.booksFinished,
+              total: stats.totalGoal,
+              pagesRead: stats.pagesRead,
+              hoursListened: stats.hoursListened,
+              reviewStreak: stats.reviewStreak,
             ),
           ],
         );

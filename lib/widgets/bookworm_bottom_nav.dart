@@ -26,13 +26,13 @@ class BookwormBottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: BookwormColors.surface.withValues(alpha: 0.95),
+        color: BookwormColors.surface.withOpacity(0.95),
         border: Border(
           top: BorderSide(color: BookwormColors.outlineVariant),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
+            color: Colors.black.withOpacity(0.06),
             blurRadius: 12,
             offset: const Offset(0, -2),
           ),

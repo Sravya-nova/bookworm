@@ -11,9 +11,9 @@ abstract final class SampleData {
     title: 'The Secret History',
     author: 'Donna Tartt',
     coverUrl:
-        'https://lh3.googleusercontent.com/aida-public/AB6AXuAPUrDuBctfNkx2uj2BeE8CCN-QTWOXGDw8BV0Dla7MGnKamBh0MF4FRrTLQG-CmVo8uyucFBHrDpBVETlRsYN0QE2w7toFzJG9eZ_v-JWc3jd4d8pcQoAviuH84ddxtsTIgJeuwQXed1ZQpQb5tFcXXRmKVy2xJvapsqaNhlWZMOfMi-vCiszp-tNBxKBjiUeAYqq1BBaMoOCcWpNOVhXbcV9Jj_yoZLodLo4V8mYN4H3VaoQW1t6GzV0duHmBALtL5GEqmHSXc2U',
-    progress: 0.64,
-    currentPage: 328,
+        'https://images.unsplash.com/photo-1544947950-fa07a98d237f',
+    progress: 0.0,
+    currentPage: 0,
     totalPages: 512,
   );
 

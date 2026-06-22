@@ -1,77 +1,188 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-import '../data/sample_data.dart';
-import '../models/book.dart';
+import '../data/api_service.dart';
+import '../data/network_service.dart';
+import '../models/book.dart' as legacy;
+import '../models/gutendex_book.dart' as guten;
+import '../models/stats_models.dart';
 import '../theme/bookworm_colors.dart';
 import '../widgets/book_cover_card.dart';
 import '../widgets/editorial_background.dart';
 import '../widgets/network_cover_image.dart';
+import '../data/sample_data.dart';
+import 'book_details_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final book = SampleData.currentReading;
+  State<HomeScreen> createState() => _HomeScreenState();
+}
 
+class _HomeScreenState extends State<HomeScreen> {
+  final NetworkService _networkService = NetworkService();
+  final ApiService _apiService = ApiService();
+  late Future<ReadingStats> _statsFuture;
+  late Future<List<guten.Book>> _curatedFuture;
+  
+  @override
+  void initState() {
+    super.initState();
+    _statsFuture = _networkService.fetchReadingStats();
+    _curatedFuture = _apiService.fetchBooks(); // Fetches popular books by default
+  }
+
+  Future<void> _openReader(String url) async {
+    // Appending an anchor to open "in the middle" (Chapter 10 for Pride & Prejudice)
+    final anchorUrl = url.contains('1342-h.htm') ? '$url#link2HCH0010' : url;
+    final uri = Uri.parse(anchorUrl);
+    
+    if (await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      // Record progress in Firebase
+      await _networkService.recordReadingSession(pages: 15);
+      if (mounted) {
+        setState(() {
+          _statsFuture = _networkService.fetchReadingStats();
+        });
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open the book reader')),
+        );
+      }
+    }
+  }
+
+  Future<void> _openSocial(String platform) async {
+    final url = platform == 'reddit' 
+      ? 'https://www.reddit.com/r/books/top/' 
+      : 'https://twitter.com/search?q=bookrecommendations&src=typed_query';
+    
+    final uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open the community post')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return EditorialBackground(
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
-        children: [
-          _SectionHeader(
-            title: 'Continue Reading',
-            trailing: _StreakBadge(days: 15),
-          ),
-          const SizedBox(height: 16),
-          _ContinueReadingCard(book: book),
-          const SizedBox(height: 32),
-          Row(
+      child: FutureBuilder<ReadingStats>(
+        future: _statsFuture,
+        builder: (context, snapshot) {
+          final stats = snapshot.data;
+          final currentReading = SampleData.currentReading;
+
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
             children: [
-              Expanded(
-                child: Text(
-                  'Curated For You',
-                  style: GoogleFonts.notoSerif(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
+              _SectionHeader(
+                title: 'Continue Reading',
+                trailing: _StreakBadge(days: stats?.currentStreak ?? 0),
+              ),
+              const SizedBox(height: 16),
+              _ContinueReadingCard(
+                book: currentReading,
+                onTap: () => _openReader('https://www.gutenberg.org/files/1342/1342-h/1342-h.htm'),
+              ),
+              const SizedBox(height: 32),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Curated For You',
+                      style: GoogleFonts.notoSerif(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
+                  TextButton(
+                    onPressed: () {
+                      final tabController = DefaultTabController.of(context);
+                      tabController.animateTo(1);
+                    },
+                    child: const Text(
+                      'Discover More',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: BookwormColors.primary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                height: 320,
+                child: FutureBuilder<List<guten.Book>>(
+                  future: _curatedFuture,
+                  builder: (context, curatedSnapshot) {
+                    if (curatedSnapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    final books = curatedSnapshot.data ?? [];
+                    // Using Unsplash as a fallback proxy for "Curated" to ensure covers always show
+                    final fallbackCovers = [
+                      'https://images.unsplash.com/photo-1544947950-fa07a98d237f',
+                      'https://images.unsplash.com/photo-1512820790803-83ca734da794',
+                      'https://images.unsplash.com/photo-1495446815901-a7297e633e8d',
+                      'https://images.unsplash.com/photo-1589998059171-988d887df646',
+                      'https://images.unsplash.com/photo-1541963463532-d68292c34b19',
+                    ];
+
+                    return ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: books.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 24),
+                      itemBuilder: (context, index) {
+                        final book = books[index];
+                        // Force a fallback cover if it's the curated section to ensure no "Classic" placeholders
+                        final displayCover = index < fallbackCovers.length 
+                            ? fallbackCovers[index] 
+                            : book.coverUrl;
+
+                        final legacyBook = legacy.Book(
+                          title: book.title,
+                          author: book.authorNames,
+                          coverUrl: displayCover,
+                        );
+                        return BookCoverCard(
+                          book: legacyBook,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => BookDetailsScreen(book: book),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    );
+                  },
                 ),
               ),
-              TextButton(
-                onPressed: () {},
-                child: const Text(
-                  'Discover More',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: BookwormColors.primary,
-                  ),
+              const SizedBox(height: 32),
+              Text(
+                'Literary Community',
+                style: GoogleFonts.notoSerif(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
                 ),
+              ),
+              const SizedBox(height: 16),
+              _CommunityPreview(
+                onTap: () => _openSocial('reddit'),
               ),
             ],
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 320,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: SampleData.recommendations.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 24),
-              itemBuilder: (context, index) {
-                return BookCoverCard(book: SampleData.recommendations[index]);
-              },
-            ),
-          ),
-          const SizedBox(height: 32),
-          Text(
-            'Literary Community',
-            style: GoogleFonts.notoSerif(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _CommunityPreview(),
-        ],
+          );
+        },
       ),
     );
   }
@@ -115,7 +226,7 @@ class _StreakBadge extends StatelessWidget {
         color: BookwormColors.tertiaryFixed,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
-          color: BookwormColors.tertiary.withValues(alpha: 0.2),
+          color: BookwormColors.tertiary.withOpacity(0.2),
         ),
       ),
       child: Row(
@@ -137,9 +248,10 @@ class _StreakBadge extends StatelessWidget {
 }
 
 class _ContinueReadingCard extends StatelessWidget {
-  const _ContinueReadingCard({required this.book});
+  const _ContinueReadingCard({required this.book, required this.onTap});
 
-  final ReadingBook book;
+  final legacy.ReadingBook book;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -149,11 +261,11 @@ class _ContinueReadingCard extends StatelessWidget {
         color: BookwormColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: BookwormColors.outlineVariant.withValues(alpha: 0.4),
+          color: BookwormColors.outlineVariant.withOpacity(0.4),
         ),
         boxShadow: [
           BoxShadow(
-            color: BookwormColors.primary.withValues(alpha: 0.08),
+            color: BookwormColors.primary.withOpacity(0.08),
             blurRadius: 20,
             offset: const Offset(0, 4),
           ),
@@ -213,7 +325,7 @@ class _ContinueReadingCard extends StatelessWidget {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
-                    onPressed: () {},
+                    onPressed: onTap,
                     style: FilledButton.styleFrom(
                       backgroundColor: BookwormColors.primary,
                       foregroundColor: BookwormColors.onPrimary,
@@ -242,126 +354,132 @@ class _ContinueReadingCard extends StatelessWidget {
 }
 
 class _CommunityPreview extends StatelessWidget {
+  final VoidCallback onTap;
+  const _CommunityPreview({required this.onTap});
+
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: AspectRatio(
-            aspectRatio: 16 / 10,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Image.network(
-                  'https://lh3.googleusercontent.com/aida-public/AB6AXuCwHzT_5gQsIXEYqxG-KthroF7BW2pg0mdPtsof11u_f9mZZiXEZcssLkGpHcyWdNnzpuWL4qDG_OuHXBcCsQ7-PLgq-ld8QdfZk-goJixs5oQva2SAP8RL8yDJG5uldjRArBdQICSDuG6WPB_PP0_IqBXCdA0uGWIBWFITwSQFq5y8wQHaiCNW1uyOHywQzFan95gb7c6ghJJFRSUTKBS9BoK9WnU4czorI5VUCHpS3G4QgTU67kHRYNay1N09lRGAiIc-URwkexA',
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(color: BookwormColors.surfaceContainer),
-                ),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.8),
-                        Colors.black.withValues(alpha: 0.2),
-                        Colors.transparent,
+    return InkWell(
+      onTap: onTap,
+      child: Column(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: AspectRatio(
+              aspectRatio: 16 / 10,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.network(
+                    'https://images.unsplash.com/photo-1512820790803-83ca734da794',
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(color: BookwormColors.surfaceContainer),
+                  ),
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [
+                          Colors.black.withOpacity(0.8),
+                          Colors.black.withOpacity(0.2),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: 16,
+                    child: Row(
+                      children: [
+                        const CircleAvatar(
+                          radius: 20,
+                          backgroundImage: NetworkImage(
+                            'https://images.unsplash.com/photo-1438761681033-6461ffad8d80',
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Julian's Library",
+                                style: GoogleFonts.notoSerif(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              Text(
+                                '5 Books for Rainy Days',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.9),
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.4),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.1),
+                            ),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.play_circle, color: Colors.white, size: 18),
+                              SizedBox(width: 4),
+                              Text(
+                                '1.2k',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                ),
-                Positioned(
-                  left: 16,
-                  right: 16,
-                  bottom: 16,
-                  child: Row(
-                    children: [
-                      const CircleAvatar(
-                        radius: 20,
-                        backgroundImage: NetworkImage(
-                          'https://lh3.googleusercontent.com/aida-public/AB6AXuARHoMhGwWMCX8xBdImewB1cPpv3HjfsaudEPzq25igkogS2GLRpGBek8CCB3PwFENlNac8CE7Z_NspLan6HlCrK_kAmwjD5vYoNSgNATivgUpHT6KefoiF0SP8wk0OTkRbNXJqKqg_NHyG8fgwYsw9T3OLXTp1gRHPxXomHYAzvafrL3MyrAD5a_kKU-jTfQ8GMUam9Kw0S697gS7cXqw5UdQwT-VuAh6HoNy6ek74BQVFWjII-ZFuBVj1vyOCeasJg1UebQH_Otk',
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "Julian's Library",
-                              style: GoogleFonts.notoSerif(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14,
-                              ),
-                            ),
-                            Text(
-                              '5 Books for Rainy Days',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.9),
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.4),
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.1),
-                          ),
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(Icons.play_circle, color: Colors.white, size: 18),
-                            SizedBox(width: 4),
-                            Text(
-                              '1.2k',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(child: _SmallCommunityCard(
-              imageUrl:
-                  'https://lh3.googleusercontent.com/aida-public/AB6AXuCvct-UIvJu5sFM6IU4lxhVSRUjvzY2MHi6gd-G1i4ZDhxQ2mp_dH4PKjwsCvtobJuIMZD6VAVw1-9zfpGRW4MKERdZwBva1U3j7eZ6odg8H9ur6UO8rTi5DZi89vFyxzmFKG9bE6Smd_QPiQCqRleTc3_EMJqgGGE5MwqmTLidDtIg0YsCIIu-rBUeBPJZY1yUIlTVVPRhYVtSHCzvaj7bMOaByXqIov9dTX8-jtlhvYFi3SE4LyFuygE7GPMYL8HQu1xFNXKKF2c',
-              quote:
-                  '"The only way to get out of the labyrinth of suffering is to forgive."',
-              likes: 428,
-              liked: true,
-            )),
-            const SizedBox(width: 16),
-            Expanded(child: _SmallCommunityCard(
-              imageUrl:
-                  'https://lh3.googleusercontent.com/aida-public/AB6AXuCRhYko2ioeez2hp_o_jQjc37MD4AFjY6f1r0yltMb8sPWvzMRxT-_zAe9mU3Y5U-svt-mmfa6sobS3pg-3WIi1tDKwD52-aQ0ELyeXkw9LGsWclQGecxvGxngr8hxQHSo57BntXui5YJlr3U8mpjwlkcdQLMhj5h9-8_WFlaZlco4tT2Yno7OfL5VaM50qtFWRpYGUUgovRiR2Q35k637GCKwHiJQqjOib30L6HMEx-T-WoHjW0HXPwr2dyP8e9rsjxD-2uTZ-JLQ',
-              quote:
-                  'Setting up my reading nook for the weekend. Thriller suggestions?',
-              likes: 156,
-            )),
-          ],
-        ),
-      ],
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(child: _SmallCommunityCard(
+                imageUrl:
+                    'https://images.unsplash.com/photo-1544947950-fa07a98d237f',
+                quote:
+                    '"The only way to get out of the labyrinth of suffering is to forgive."',
+                likes: 428,
+                liked: true,
+              )),
+              const SizedBox(width: 16),
+              Expanded(child: _SmallCommunityCard(
+                imageUrl:
+                    'https://images.unsplash.com/photo-1495446815901-a7297e633e8d',
+                quote:
+                    'Setting up my reading nook for the weekend. Thriller suggestions?',
+                likes: 156,
+              )),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -386,11 +504,11 @@ class _SmallCommunityCard extends StatelessWidget {
         color: BookwormColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: BookwormColors.outlineVariant.withValues(alpha: 0.3),
+          color: BookwormColors.outlineVariant.withOpacity(0.3),
         ),
         boxShadow: [
           BoxShadow(
-            color: BookwormColors.primary.withValues(alpha: 0.08),
+            color: BookwormColors.primary.withOpacity(0.08),
             blurRadius: 20,
             offset: const Offset(0, 4),
           ),

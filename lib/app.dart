@@ -51,7 +51,13 @@ class _BookwormAppState extends State<BookwormApp> {
       ),
       floatingActionButton: _shouldShowFab(_currentIndex)
           ? FloatingActionButton(
-              onPressed: () {},
+              onPressed: () {
+                final labels = ['post', 'discovery', 'dispatch', 'draft'];
+                final label = _currentIndex < labels.length ? labels[_currentIndex] : 'item';
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Creating new $label...')),
+                );
+              },
               child: const Icon(Icons.add),
             )
           : null,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../data/sample_data.dart';
 import '../models/book.dart';
@@ -8,6 +9,17 @@ import '../widgets/network_cover_image.dart';
 
 class CommunityScreen extends StatelessWidget {
   const CommunityScreen({super.key});
+
+  Future<void> _openPost(String platform) async {
+    final url = platform == 'reddit' 
+      ? 'https://www.reddit.com/r/books/top/' 
+      : 'https://twitter.com/search?q=bookrecommendations&src=typed_query';
+    
+    final uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      // Fallback
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +55,10 @@ class CommunityScreen extends StatelessWidget {
         ...SampleData.communityPosts.map(
           (post) => Padding(
             padding: const EdgeInsets.only(bottom: 32),
-            child: _FeedCard(post: post),
+            child: InkWell(
+              onTap: () => _openPost(post.handle.contains('@') ? 'x' : 'reddit'),
+              child: _FeedCard(post: post),
+            ),
           ),
         ),
         Center(
@@ -98,10 +113,10 @@ class _PromotedAuthorCard extends StatelessWidget {
         children: [
           Stack(
             children: [
-              AspectRatio(
+              const AspectRatio(
                 aspectRatio: 16 / 10,
                 child: NetworkCoverImage(
-                  url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuA-5Jh0JWFHGRqZ1d93yyfjrHcel1Hf1NjpZKQUYFJLUdXnkeoSQAZAQcF98ocEtBVfOSdLm1qBK_t2V45rMUk_J53xqvEL_r1v_P1KOb3LveQrt9yyq5EUeERxE3iGQbgrAG4ROjJ2PcqQZJRCOnvitC_3fzKMx9UIlSB15ucvgI08doufSneXXc2WY_bxjGfSCoy6PUkkKubS_g_31Ovlna8QIFBbk3r0k4FRs9fZ7mM4iWdZ4-WS9J57JNx6QvpIo6q3GwDsIRI',
+                  url: 'https://images.unsplash.com/photo-1455390582262-044cdead277a',
                 ),
               ),
               Positioned(
@@ -163,14 +178,18 @@ class _PromotedAuthorCard extends StatelessWidget {
                 const SizedBox(height: 16),
                 const Row(
                   children: [
-                    CircleAvatar(radius: 16, backgroundColor: BookwormColors.outlineVariant),
+                    CircleAvatar(radius: 16, backgroundImage: NetworkImage('https://images.unsplash.com/photo-1438761681033-6461ffad8d80')),
                     SizedBox(width: 12),
                     Text('Celia Thorne', style: TextStyle(fontWeight: FontWeight.w600)),
                   ],
                 ),
                 const SizedBox(height: 24),
                 FilledButton(
-                  onPressed: () {},
+                  onPressed: () {
+                     ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Opening promoted chapter...')),
+                    );
+                  },
                   style: FilledButton.styleFrom(
                     backgroundColor: BookwormColors.primary,
                     padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
@@ -214,9 +233,9 @@ class _FeedCard extends StatelessWidget {
                     width: 64,
                     height: 64,
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
+                      color: Colors.white.withOpacity(0.2),
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+                      border: Border.all(color: Colors.white.withOpacity(0.3)),
                     ),
                     child: const Icon(Icons.play_arrow, color: Colors.white, size: 32),
                   ),
@@ -228,7 +247,7 @@ class _FeedCard extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.4),
+                      color: Colors.black.withOpacity(0.4),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(

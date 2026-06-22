@@ -5,6 +5,7 @@ import '../data/api_service.dart';
 import '../models/gutendex_book.dart' as guten;
 import '../theme/bookworm_colors.dart';
 import '../widgets/network_cover_image.dart';
+import 'book_details_screen.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -15,6 +16,7 @@ class ExploreScreen extends StatefulWidget {
 
 class _ExploreScreenState extends State<ExploreScreen> {
   final ApiService _apiService = ApiService();
+  final TextEditingController _searchController = TextEditingController();
   List<guten.Book> _books = [];
   int _currentIndex = 0;
   Offset _dragOffset = Offset.zero;
@@ -27,12 +29,17 @@ class _ExploreScreenState extends State<ExploreScreen> {
     _loadBooks();
   }
 
-  Future<void> _loadBooks() async {
+  Future<void> _loadBooks({String? query}) async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
     try {
-      final books = await _apiService.fetchBooks();
+      final books = await _apiService.fetchBooks(query: query);
       setState(() {
         _books = books;
         _isLoading = false;
+        _currentIndex = 0;
       });
     } catch (e) {
       setState(() {
@@ -55,6 +62,40 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Search for books or authors...',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.clear),
+                onPressed: () {
+                  _searchController.clear();
+                  _loadBooks();
+                },
+              ),
+              filled: true,
+              fillColor: BookwormColors.surfaceContainerLow,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+            ),
+            onSubmitted: (value) => _loadBooks(query: value),
+          ),
+        ),
+        Expanded(
+          child: _buildBody(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBody() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -67,13 +108,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
             Text('Error: $_errorMessage'),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _isLoading = true;
-                  _errorMessage = null;
-                });
-                _loadBooks();
-              },
+              onPressed: () => _loadBooks(query: _searchController.text),
               child: const Text('Retry'),
             ),
           ],
@@ -88,7 +123,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 100),
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
       child: Column(
         children: [
           Text(
@@ -98,48 +133,62 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   letterSpacing: 2,
                 ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           Expanded(
             child: Center(
-              child: AspectRatio(
-                aspectRatio: 2 / 3,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Transform.scale(
-                      scale: 0.97,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: BookwormColors.surfaceContainer,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: BookwormColors.outlineVariant),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 400),
+                child: AspectRatio(
+                  aspectRatio: 2 / 3,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Transform.scale(
+                        scale: 0.97,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: BookwormColors.surfaceContainer,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: BookwormColors.outlineVariant),
+                          ),
                         ),
                       ),
-                    ),
-                    GestureDetector(
-                      onPanUpdate: (details) {
-                        setState(() {
-                          _dragOffset += details.delta;
-                        });
-                      },
-                      onPanEnd: (details) {
-                        if (_dragOffset.dx > 100) {
-                          _swipe(true);
-                        } else if (_dragOffset.dx < -100) {
-                          _swipe(false);
-                        } else {
-                          setState(() => _dragOffset = Offset.zero);
-                        }
-                      },
-                      child: Transform.translate(
-                        offset: _dragOffset,
-                        child: Transform.rotate(
-                          angle: _dragOffset.dx / 400,
-                          child: _DiscoveryCard(book: book, dragOffset: _dragOffset),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => BookDetailsScreen(book: book),
+                            ),
+                          );
+                        },
+                        onPanUpdate: (details) {
+                          setState(() {
+                            _dragOffset += details.delta;
+                          });
+                        },
+                        onPanEnd: (details) {
+                          if (_dragOffset.dx > 100) {
+                            _swipe(true);
+                          } else if (_dragOffset.dx < -100) {
+                            _swipe(false);
+                          } else {
+                            setState(() => _dragOffset = Offset.zero);
+                          }
+                        },
+                        child: Hero(
+                          tag: 'book-cover-${book.id}',
+                          child: Transform.translate(
+                            offset: _dragOffset,
+                            child: Transform.rotate(
+                              angle: _dragOffset.dx / 400,
+                              child: _DiscoveryCard(book: book, dragOffset: _dragOffset),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -157,13 +206,22 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 icon: Icons.bookmark,
                 filled: true,
                 large: true,
-                onTap: () => _swipe(true),
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Added "${book.title}" to your collection')),
+                  );
+                  _swipe(true);
+                },
               ),
               const SizedBox(width: 32),
               _ActionButton(
                 icon: Icons.favorite_border,
                 color: BookwormColors.primary,
-                onTap: () {},
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Liked "${book.title}"')),
+                  );
+                },
               ),
             ],
           ),
@@ -187,7 +245,7 @@ class _DiscoveryCard extends StatelessWidget {
         border: Border.all(color: BookwormColors.outlineVariant),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
+            color: Colors.black.withOpacity(0.08),
             blurRadius: 40,
             offset: const Offset(0, 12),
           ),
@@ -204,8 +262,8 @@ class _DiscoveryCard extends StatelessWidget {
                 begin: Alignment.bottomCenter,
                 end: Alignment.center,
                 colors: [
-                  Colors.black.withValues(alpha: 0.8),
-                  Colors.black.withValues(alpha: 0.3),
+                  Colors.black.withOpacity(0.8),
+                  Colors.black.withOpacity(0.3),
                   Colors.transparent,
                 ],
               ),
@@ -241,7 +299,7 @@ class _DiscoveryCard extends StatelessWidget {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: BookwormColors.primary.withValues(alpha: 0.9),
+                            color: BookwormColors.primary.withOpacity(0.9),
                             borderRadius: BorderRadius.circular(2),
                           ),
                           child: Text(
@@ -279,7 +337,7 @@ class _DiscoveryCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.9),
+                          color: Colors.white.withOpacity(0.9),
                           fontSize: 14,
                         ),
                       ),
@@ -318,17 +376,24 @@ class _SwipeCue extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       decoration: BoxDecoration(
-        border: Border.all(color: color, width: 2),
-        borderRadius: BorderRadius.circular(4),
+        color: color.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Text(
         label,
         style: GoogleFonts.notoSerif(
-          color: color,
-          fontWeight: FontWeight.w700,
-          fontSize: 18,
+          color: Colors.white,
+          fontWeight: FontWeight.w900,
+          fontSize: 22,
           letterSpacing: 2,
         ),
       ),

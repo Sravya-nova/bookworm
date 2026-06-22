@@ -84,7 +84,7 @@ abstract final class BookwormTheme {
       scaffoldBackgroundColor: BookwormColors.background,
       textTheme: textTheme,
       appBarTheme: AppBarTheme(
-        backgroundColor: BookwormColors.surface.withValues(alpha: 0.95),
+        backgroundColor: BookwormColors.surface.withOpacity(0.95),
         foregroundColor: BookwormColors.onSurface,
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -107,7 +107,7 @@ abstract final class BookwormTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
           side: BorderSide(
-            color: BookwormColors.outlineVariant.withValues(alpha: 0.4),
+            color: BookwormColors.outlineVariant.withOpacity(0.4),
           ),
         ),
       ),
